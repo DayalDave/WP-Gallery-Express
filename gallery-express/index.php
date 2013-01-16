@@ -48,7 +48,7 @@ function gallery_scripts() {
 	wp_enqueue_script('prettyphoto');
 
 	//http://galleria.io/
-	wp_register_script('galleria', plugins_url('js/galleria-1.2.6.min.js', __FILE__), array('jquery'),'',true);
+	wp_register_script('galleria', plugins_url('js/galleria-1.2.8.min.js', __FILE__), array('jquery'),'',true);
 	wp_enqueue_script('galleria');
 
 	wp_register_script( 'galleria_theme', plugins_url('js/galleria.classic.min.js', __FILE__), array('galleria'),'',true);
@@ -63,10 +63,22 @@ add_action('wp_enqueue_scripts', 'gallery_scripts');
  
 // Function that runs everytime that [gallery] is called
 function gallery_shortcode_plus($attr) {
-	global $post, $wp_locale;
+	$post = get_post();
 
 	static $instance = 0;
 	$instance++;
+
+	if ( ! empty( $attr['ids'] ) ) {
+		// 'ids' is explicitly ordered, unless you specify otherwise.
+		if ( empty( $attr['orderby'] ) )
+			$attr['orderby'] = 'post__in';
+		$attr['include'] = $attr['ids'];
+	}
+
+	// Allow plugins/themes to override the default gallery template.
+	$output = apply_filters('post_gallery', '', $attr);
+	if ( $output != '' )
+		return $output;
 
 	// We're trusting author input, so let's at least make sure it looks like a valid orderby statement
 	if ( isset( $attr['orderby'] ) ) {
@@ -83,11 +95,11 @@ function gallery_shortcode_plus($attr) {
 		'itemtag'    => 'div',
 		'icontag'    => 'figure',
 		'captiontag' => 'figcaption',
-		'columns'    => 3,
+		'columns'    => 5,
 		'size'       => 'thumbnail',
 		'include'    => '',
 		'exclude'    => '',
-		'height'     => 400,
+		'height'     => 500,
 		'width'      => 600,
 	), $attr));
 
@@ -145,7 +157,6 @@ function gallery_shortcode_plus($attr) {
 	$itemtag 	 = tag_escape($itemtag);
 	$captiontag  = tag_escape($captiontag);
 	$columns 	 = intval($columns);
-	$itemwidth 	 = $columns > 0 ? floor(100/$columns) : 100;
 	$selector    = "gallery-{$instance}";
 	$size_class  = sanitize_html_class( $size );
 	$gallery_div = "<div id='$selector' class='gallery galleryid-{$id} gallery-{$type} ";
@@ -160,7 +171,7 @@ function gallery_shortcode_plus($attr) {
 
 		foreach ( $attachments as $id => $attachment ) {
 			
-			// Change link, depending on whether it's a lightbox or not		
+			// Change link, depending on whether it's a lightbox or core		
 			if($type === 'core'){
 				$href = isset($attr['link']) && 'file' == $attr['link'] ? $attachment->guid : get_attachment_link($id);
 			} else {
@@ -188,21 +199,42 @@ function gallery_shortcode_plus($attr) {
 		
 		// Check if end of row
 		if ( $columns > 0 && ++$i % $columns == 0 )
-			$output .= '<br class="clearfix" />';
+			$output .= "<br class=\"clearfix\" />\n";
 		}
 
-		$output .= "<br class=\"clearfix\" />\n";
+		
 	
 	// Different output for slider
 	} else if($type ==='slider'){
+		global $_wp_additional_image_sizes;
+
 		
+
+		// height of slider container
 		$output .= "' height='".$height."' width='".$width."'>\n";
+
+		if(!in_array($size, $_wp_additional_image_sizes)){
+			
+		}
+		$thumb_size = array(
+			'h' => intval(get_option('thumbnail_size_h')),
+        	'w' => intval(get_option('thumbnail_size_w'))
+		);
+
 		foreach ( $attachments as $id => $attachment ) {
 			
 			$output .= "\t".'<a href="'.$attachment->guid.'">'."\n";
+			$output .= wp_get_attachment_image( $id, $size, array(
+							'class'	=> "attachment-$size",
+							'alt'   => trim(strip_tags( get_post_meta($id, '_wp_attachment_image_alt', true))),
+							'title' => trim(strip_tags( $attachment->post_title ))
+			));
+			/*
             $output .= "\t\t".'<img title="'.wptexturize($attachment->post_excerpt).'" alt="';
             $output .= trim(strip_tags( get_post_meta($id, '_wp_attachment_image_alt', true) ));
-            $output .='" src="'.wp_get_attachment_thumb_url( $id )."\">\n";
+            $output .= '" src="'.wp_get_attachment_thumb_url( $id );
+            $output .= "\" height='".$thumb_size['h']."' width='".$thumb_size['w']."' />\n";
+            */
         	$output .= "\t".'</a>'."\n";
         }
 	}
